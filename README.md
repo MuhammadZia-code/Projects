@@ -26,12 +26,17 @@ fully navigable PDF.
 # 1. Extract the templates so that ./TPL/<category>/*.dat exist
 unzip TPL.zip            # produces ./TPL/...
 
-# 2. Install the one dependency
-pip install reportlab
+# 2. Install dependencies (reportlab renders; pypdf shrinks the result)
+pip install reportlab pypdf
 
 # 3. Build the PDF  (override the source dir with TPL_DIR=... if needed)
 python3 scripts/generate_pdf.py GEM_Template_Library.pdf
 ```
+
+`reportlab` is required; `pypdf` is optional — if present, the build runs a
+final pass that de-duplicates identical objects and recompresses page streams
+(keeping the outline and all internal links), which cuts the file from
+~37 MB to ~24 MB. If `pypdf` is not installed, that step is skipped.
 
 The build reads every `.dat` file and the category `.doc` files, so re-running
 it picks up any added or changed templates automatically.

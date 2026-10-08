@@ -344,30 +344,78 @@ def render_dat(doc, f, case):
     avail_w = (PAGE_W - R_MARGIN) - text_x
     width_chars = max(8, int(avail_w / CHAR_W))
 
-    c.setFont(MONO, MONO_SIZE)
+    # Render each page's line numbers and content as single text objects
+    # (one BT/ET each) instead of per-line draw calls -- this keeps the
+    # content streams compact for very large files.
+    def start_content_to():
+        t = c.beginText(text_x, doc.y)
+        t.setFont(MONO, MONO_SIZE)
+        t.setLeading(MONO_LEAD)
+        t.setFillColor(INK)
+        return t
+
+    content_to = start_content_to()
+    num_cmds = []   # (x, y, number_string) for the current page
+
+    def flush_page():
+        c.drawText(content_to)
+        if num_cmds:
+            nt = c.beginText()
+            nt.setFont(MONO, MONO_SIZE)
+            nt.setLeading(MONO_LEAD)
+            nt.setFillColor(NUMCOL)
+            for x, y, s in num_cmds:
+                nt.setTextOrigin(x, y)
+                nt.textLine(s)
+            c.drawText(nt)
+
     for i, raw_line in enumerate(src, start=1):
         line = sanitize(expand_tabs(raw_line))
         vis = wrap_mono(line, width_chars)
         for j, seg in enumerate(vis):
             if doc.y < CONTENT_BOT + MONO_LEAD:
+                flush_page()
                 doc.footer(case["name"])
                 doc.new_page()
                 draw_header(cont=True)
                 doc.y -= 40
-                c.setFont(MONO, MONO_SIZE)
+                content_to = start_content_to()
+                num_cmds = []
             if j == 0:
-                c.setFillColor(NUMCOL)
-                c.setFont("Courier", MONO_SIZE)
-                c.drawRightString(num_right, doc.y, str(i))
-            c.setFillColor(INK)
-            c.setFont(MONO, MONO_SIZE)
-            if seg:
-                c.drawString(text_x, doc.y, seg)
+                nx = num_right - len(str(i)) * CHAR_W
+                num_cmds.append((nx, doc.y, str(i)))
+            content_to.textLine(seg)
             doc.y -= MONO_LEAD
+    flush_page()
     doc.footer(case["name"])
+
+
+def compress_pdf(path):
+    """Shrink the file by de-duplicating identical objects and recompressing
+    page content streams. Keeps the outline and all internal links intact.
+    No-op if pypdf is not installed."""
+    try:
+        from pypdf import PdfWriter
+    except Exception:
+        print("pypdf not available; skipping compression step")
+        return
+    w = PdfWriter(clone_from=path)
+    try:
+        w.compress_identical_objects(remove_duplicates=True,
+                                     remove_unreferenced=True)
+    except TypeError:  # older pypdf keyword names
+        w.compress_identical_objects(remove_identicals=True,
+                                     remove_orphans=True)
+    for p in w.pages:
+        try:
+            p.compress_content_streams()
+        except Exception:
+            pass
+    w.write(path)
 
 
 if __name__ == "__main__":
     folders = build_model()
     build(folders, OUT)
+    compress_pdf(OUT)
     print("wrote", OUT)
