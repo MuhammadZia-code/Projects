@@ -1,0 +1,10 @@
+# Generated deliverable (large binary) — regenerate with scripts/generate_pdf.py
+GEM_Template_Library.pdf
+*.pdf
+
+# Extracted source templates (provided separately as TPL.zip)
+TPL/
+
+# Python
+__pycache__/
+*.pyc
